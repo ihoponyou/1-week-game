@@ -1,16 +1,17 @@
 #pragma once
 
-const int ScreenScale = 2;
+const int TILE_SIZE_PX = 32;
 namespace GameConstants
 {
-    const int WorldWidth = 400;
-    const int WorldHeight = 400;
+    const float PLAYER_SPEED = 10;
+    const int WORLD_WIDTH = 10;
+    const int WORLD_HEIGHT = 10;
 }
 
 namespace AppConstants
 {
-    const char* const WindowTitle = "one week game";
+    const char* const WINDOW_TITLE = "1 week game";
 
-    const int ScreenWidth = GameConstants::WorldWidth * ScreenScale;
-    const int ScreenHeight = GameConstants::WorldHeight * ScreenScale;
+    const int SCREEN_WIDTH = GameConstants::WORLD_WIDTH * TILE_SIZE_PX;
+    const int SCREEN_HEIGHT = GameConstants::WORLD_HEIGHT * TILE_SIZE_PX;
 }

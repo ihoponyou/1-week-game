@@ -1,18 +1,24 @@
 
+
 #include "config.hpp"
 #include <cassert>
-#include <cstdio>
+#include <cmath>
+#include <cstdlib>
 #include <raylib.h>
 #include <raymath.h>
 
 #define MAP_WIDTH 10
 #define MAP_HEIGHT 10
-#define TILE_SIZE_PX 16
 
 typedef struct Player {
     Vector2 position;
     Vector2 velocity;
 } Player;
+
+bool approximatelyEqual(float a, float b)
+{
+    return abs(a - b) < 0.01f;
+}
 
 int main()
 {
@@ -25,22 +31,20 @@ int main()
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 1, 0, 1, 1, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 1, 1, 1, 1, 1, 1, 1, 1, 0},
+        {0, 0, 0, 0, 0, 1, 0, 1, 0, 0},
+        {0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
     };
 
     Player player = {};
+    // player.position = {(float)MAP_WIDTH / 2 - 0.5f,
+    //                    (float)MAP_HEIGHT / 2 - 0.5f};
 
-    Vector2 windowCenter = {(float)AppConstants::ScreenWidth / 2,
-                            (float)AppConstants::ScreenHeight / 2};
-
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(AppConstants::ScreenWidth,
-               AppConstants::ScreenHeight,
-               AppConstants::WindowTitle);
+    InitWindow(AppConstants::SCREEN_WIDTH,
+               AppConstants::SCREEN_HEIGHT,
+               AppConstants::WINDOW_TITLE);
 
     while (!WindowShouldClose())
     {
@@ -49,12 +53,9 @@ int main()
         BeginDrawing();
 
         ClearBackground(BLACK);
-        DrawText(TextFormat("%f", deltaTime), 10, 40, 20, YELLOW);
 
-        // map render
+        // ---------------- MAP RENDER ------------------------
         // TODO: pre generate an iterable so we dont check 0s
-        int mapCenterIndexX{MAP_WIDTH / 2};
-        int mapCenterIndexY{MAP_HEIGHT / 2};
         for (int y = 0; y < MAP_HEIGHT; y++)
         {
             for (int x = 0; x < MAP_WIDTH; x++)
@@ -62,41 +63,89 @@ int main()
                 if (map[y][x] == 0)
                     continue;
 
-                int tileOffsetX = x - mapCenterIndexX;
-                int tileOffsetY = y - mapCenterIndexY;
-                int posX = windowCenter.x + tileOffsetX * TILE_SIZE_PX;
-                int posY = windowCenter.y + tileOffsetY * TILE_SIZE_PX;
-
-                DrawRectangle(posX, posY, TILE_SIZE_PX, TILE_SIZE_PX, WHITE);
+                DrawRectangle(x * TILE_SIZE_PX,
+                              y * TILE_SIZE_PX,
+                              TILE_SIZE_PX,
+                              TILE_SIZE_PX,
+                              WHITE);
             }
         }
 
-        // player logic
+        // ---------------- PLAYER LOGIC ------------------------
+        Vector2 movementInput{};
         if (IsKeyDown(KEY_D))
-            player.velocity.x += 1;
+            movementInput.x += 1;
         if (IsKeyDown(KEY_A))
-            player.velocity.x -= 1;
+            movementInput.x -= 1;
         if (IsKeyDown(KEY_W))
-            player.velocity.y -= 1;
+            movementInput.y -= 1;
         if (IsKeyDown(KEY_S))
-            player.velocity.y += 1;
+            movementInput.y += 1;
 
-        player.velocity.x = Clamp(player.velocity.x, -10, 10);
-        player.velocity.y = Clamp(player.velocity.y, -10, 10);
+        // acceleration
+        player.velocity =
+            Vector2Lerp(player.velocity,
+                        movementInput * GameConstants::PLAYER_SPEED,
+                        1 - pow(0.7, deltaTime));
+
+        // collision
+        int playerGridX = static_cast<int>(player.position.x) % MAP_WIDTH;
+        int playerGridY = static_cast<int>(player.position.y) % MAP_HEIGHT;
+        DrawText(TextFormat("(%i %i)", playerGridX, playerGridY),
+                 100,
+                 10,
+                 10,
+                 GREEN);
+        if (player.velocity.x > 0)
+        {
+            int topTile = map[playerGridY][playerGridX + 1];
+            int bottomTile = map[playerGridY + 1][playerGridX + 1];
+            DrawRectangle((playerGridX + 1) * TILE_SIZE_PX,
+                          playerGridY * TILE_SIZE_PX,
+                          TILE_SIZE_PX,
+                          TILE_SIZE_PX,
+                          topTile ? MAROON : GREEN);
+            DrawRectangle((playerGridX + 1) * TILE_SIZE_PX,
+                          (playerGridY + 1) * TILE_SIZE_PX,
+                          TILE_SIZE_PX,
+                          TILE_SIZE_PX,
+                          bottomTile ? MAROON : GREEN);
+            if (topTile && bottomTile)
+            {
+                player.position.x = playerGridX;
+                player.velocity.x = 0;
+            }
+            else if (bottomTile &&
+                     !approximatelyEqual(player.position.y, playerGridY))
+            {
+                player.position.x = playerGridX;
+                player.velocity.x = 0;
+            }
+            else if (topTile &&
+                     !approximatelyEqual(player.position.y, playerGridY))
+            {
+
+                player.position.x = playerGridX;
+                player.velocity.x = 0;
+            }
+        }
+
         player.position += player.velocity * deltaTime;
 
-        // player render
-        DrawText(TextFormat("%f\n%f\n%f\n%f",
+        // ---------------- PLAYER RENDER ------------------------
+        DrawText(TextFormat("%.2f\n%.2f\n%.2f\n%.2f",
                             player.position.x,
                             player.position.y,
                             player.velocity.x,
                             player.velocity.y),
-                 100,
                  10,
-                 20,
+                 10,
+                 10,
                  GREEN);
-        DrawRectangle(player.position.x - ((float)TILE_SIZE_PX / 2),
-                      player.position.y - TILE_SIZE_PX,
+
+        Vector2 playerScreenPos = player.position * TILE_SIZE_PX;
+        DrawRectangle(playerScreenPos.x,
+                      playerScreenPos.y,
                       TILE_SIZE_PX,
                       TILE_SIZE_PX,
                       RED);
