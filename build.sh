@@ -1,4 +1,4 @@
-# !/bin/bash
+#!/bin/bash
 
 EXPECTED_ARG_COUNT=$((1))
 EXPECTED_CONFIG_PATTERN="^(debug|release)$"
@@ -27,4 +27,4 @@ build_config=${build_config^}
 mkdir -p build
 cd build
 cmake ..
-cmake --build ./build --config $build_config --target game -j 10 --
+cmake --build ./build --config $(build_config) --target game -j 10 --

@@ -17,6 +17,8 @@ BraceWrapping:
   BeforeElse: true
   BeforeWhile: true
   IndentBraces: false
+FixNamespaceComments: false
 IndentWidth: 4
+NamespaceIndentation: All
 PointerAlignment: Left
 UseTab: Never
