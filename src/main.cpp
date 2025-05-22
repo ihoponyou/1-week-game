@@ -88,13 +88,13 @@ int main()
 
         // acceleration
         float playerSpeed = GameConstants::PLAYER_SPEED;
-        player.velocity = Vector2Lerp(player.velocity,
-                                      movementInput * playerSpeed,
-                                      1 - pow(0.3, deltaTime));
         if (IsKeyDown(KEY_LEFT_SHIFT))
         {
-            player.velocity *= 0.5f;
+            playerSpeed *= 0.1f;
         }
+        player.velocity = Vector2Lerp(player.velocity,
+                                      movementInput * playerSpeed,
+                                      1 - pow(0.001, deltaTime));
 
         player.position += player.velocity * deltaTime;
 
@@ -104,19 +104,36 @@ int main()
 
         bool movingRight = player.velocity.x >= 0;
         int tileOffsetX = movingRight ? 1 : 0;
-        int topRightTile = map[playerGridY][playerGridX + tileOffsetX];
-        int bottomRightTile = map[playerGridY + 1][playerGridX + tileOffsetX];
-        if ((approximatelyEqual(player.position.y, playerGridY) &&
-             topRightTile) ||
-            (approximatelyEqual(player.position.y, playerGridY + 1) &&
-             bottomRightTile) ||
-            (topRightTile || bottomRightTile))
+        int topTile = map[playerGridY][playerGridX + tileOffsetX];
+        int bottomTile = map[playerGridY + 1][playerGridX + tileOffsetX];
+
+        bool topAxisAligned =
+            approximatelyEqual(player.position.y, playerGridY);
+        bool bottomAxisAligned =
+            approximatelyEqual(player.position.y, playerGridY + 1);
+        if ((topAxisAligned && topTile) || (bottomAxisAligned && bottomTile) ||
+            ((!topAxisAligned && !bottomAxisAligned) &&
+             (topTile || bottomTile)))
         {
             player.velocity.x = 0;
             player.position.x = playerGridX + (movingRight ? 0 : 1);
         }
 
-        int tileOffsetY = (player.velocity.y >= 0) ? 1 : -1;
+        bool movingDown = player.velocity.y >= 0;
+        int tileOffsetY = movingDown ? 1 : 0;
+        int leftTile = map[playerGridY + tileOffsetY][playerGridX];
+        int rightTile = map[playerGridY + tileOffsetY][playerGridX + 1];
+        bool leftAxisAligned =
+            approximatelyEqual(player.position.x, playerGridX);
+        bool rightAxisAligned =
+            approximatelyEqual(player.position.x, playerGridX + 1);
+        if ((leftAxisAligned && leftTile) || (rightAxisAligned && rightTile) ||
+            ((!leftAxisAligned && !rightAxisAligned) &&
+             (leftTile || rightTile)))
+        {
+            player.velocity.y = 0;
+            player.position.y = playerGridY + (movingDown ? 0 : 1);
+        }
 
         // ---------------- PLAYER RENDER ------------------------
         // grid position
@@ -127,12 +144,10 @@ int main()
                  GREEN);
 
         // collision visualizers
-        DrawTile(playerGridX + tileOffsetX,
-                 playerGridY,
-                 topRightTile ? RED : GREEN);
+        DrawTile(playerGridX + tileOffsetX, playerGridY, topTile ? RED : GREEN);
         DrawTile(playerGridX + tileOffsetX,
                  playerGridY + 1,
-                 bottomRightTile ? RED : GREEN);
+                 bottomTile ? RED : GREEN);
 
         // cl_showpos
         DrawText(TextFormat("%.2f\n%.2f\n%.2f\n%.2f",
