@@ -1,5 +1,4 @@
 
-
 #include "config.hpp"
 #include <cassert>
 #include <cmath>
@@ -7,8 +6,9 @@
 #include <raylib.h>
 #include <raymath.h>
 
-#define MAP_WIDTH 10
-#define MAP_HEIGHT 10
+const int MAP_WIDTH{10};
+const int MAP_HEIGHT{10};
+const float FLOAT_DIFF_THRESHOLD{0.01f};
 
 typedef struct Player {
     Vector2 position;
@@ -17,7 +17,16 @@ typedef struct Player {
 
 bool approximatelyEqual(float a, float b)
 {
-    return abs(a - b) < 0.01f;
+    return abs(a - b) < FLOAT_DIFF_THRESHOLD;
+}
+
+void DrawTile(float x, float y, Color color)
+{
+    DrawRectangle(x * TILE_SIZE_PX,
+                  y * TILE_SIZE_PX,
+                  TILE_SIZE_PX,
+                  TILE_SIZE_PX,
+                  color);
 }
 
 int main()
@@ -31,10 +40,10 @@ int main()
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 1, 0, 1, 1, 0},
+        {0, 0, 1, 0, 0, 1, 0, 1, 1, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 1, 0, 1, 0, 0},
-        {0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+        {0, 0, 1, 0, 0, 1, 0, 1, 0, 0},
+        {0, 0, 1, 0, 0, 1, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
     };
 
@@ -62,12 +71,7 @@ int main()
             {
                 if (map[y][x] == 0)
                     continue;
-
-                DrawRectangle(x * TILE_SIZE_PX,
-                              y * TILE_SIZE_PX,
-                              TILE_SIZE_PX,
-                              TILE_SIZE_PX,
-                              WHITE);
+                DrawTile(x, y, WHITE);
             }
         }
 
@@ -83,56 +87,54 @@ int main()
             movementInput.y += 1;
 
         // acceleration
-        player.velocity =
-            Vector2Lerp(player.velocity,
-                        movementInput * GameConstants::PLAYER_SPEED,
-                        1 - pow(0.7, deltaTime));
+        float playerSpeed = GameConstants::PLAYER_SPEED;
+        player.velocity = Vector2Lerp(player.velocity,
+                                      movementInput * playerSpeed,
+                                      1 - pow(0.3, deltaTime));
+        if (IsKeyDown(KEY_LEFT_SHIFT))
+        {
+            player.velocity *= 0.5f;
+        }
+
+        player.position += player.velocity * deltaTime;
 
         // collision
         int playerGridX = static_cast<int>(player.position.x) % MAP_WIDTH;
         int playerGridY = static_cast<int>(player.position.y) % MAP_HEIGHT;
+
+        bool movingRight = player.velocity.x >= 0;
+        int tileOffsetX = movingRight ? 1 : 0;
+        int topRightTile = map[playerGridY][playerGridX + tileOffsetX];
+        int bottomRightTile = map[playerGridY + 1][playerGridX + tileOffsetX];
+        if ((approximatelyEqual(player.position.y, playerGridY) &&
+             topRightTile) ||
+            (approximatelyEqual(player.position.y, playerGridY + 1) &&
+             bottomRightTile) ||
+            (topRightTile || bottomRightTile))
+        {
+            player.velocity.x = 0;
+            player.position.x = playerGridX + (movingRight ? 0 : 1);
+        }
+
+        int tileOffsetY = (player.velocity.y >= 0) ? 1 : -1;
+
+        // ---------------- PLAYER RENDER ------------------------
+        // grid position
         DrawText(TextFormat("(%i %i)", playerGridX, playerGridY),
                  100,
                  10,
                  10,
                  GREEN);
-        if (player.velocity.x > 0)
-        {
-            int topTile = map[playerGridY][playerGridX + 1];
-            int bottomTile = map[playerGridY + 1][playerGridX + 1];
-            DrawRectangle((playerGridX + 1) * TILE_SIZE_PX,
-                          playerGridY * TILE_SIZE_PX,
-                          TILE_SIZE_PX,
-                          TILE_SIZE_PX,
-                          topTile ? MAROON : GREEN);
-            DrawRectangle((playerGridX + 1) * TILE_SIZE_PX,
-                          (playerGridY + 1) * TILE_SIZE_PX,
-                          TILE_SIZE_PX,
-                          TILE_SIZE_PX,
-                          bottomTile ? MAROON : GREEN);
-            if (topTile && bottomTile)
-            {
-                player.position.x = playerGridX;
-                player.velocity.x = 0;
-            }
-            else if (bottomTile &&
-                     !approximatelyEqual(player.position.y, playerGridY))
-            {
-                player.position.x = playerGridX;
-                player.velocity.x = 0;
-            }
-            else if (topTile &&
-                     !approximatelyEqual(player.position.y, playerGridY))
-            {
 
-                player.position.x = playerGridX;
-                player.velocity.x = 0;
-            }
-        }
+        // collision visualizers
+        DrawTile(playerGridX + tileOffsetX,
+                 playerGridY,
+                 topRightTile ? RED : GREEN);
+        DrawTile(playerGridX + tileOffsetX,
+                 playerGridY + 1,
+                 bottomRightTile ? RED : GREEN);
 
-        player.position += player.velocity * deltaTime;
-
-        // ---------------- PLAYER RENDER ------------------------
+        // cl_showpos
         DrawText(TextFormat("%.2f\n%.2f\n%.2f\n%.2f",
                             player.position.x,
                             player.position.y,
@@ -143,12 +145,8 @@ int main()
                  10,
                  GREEN);
 
-        Vector2 playerScreenPos = player.position * TILE_SIZE_PX;
-        DrawRectangle(playerScreenPos.x,
-                      playerScreenPos.y,
-                      TILE_SIZE_PX,
-                      TILE_SIZE_PX,
-                      RED);
+        // player
+        DrawTile(player.position.x, player.position.y, RED);
 
         EndDrawing();
     }
