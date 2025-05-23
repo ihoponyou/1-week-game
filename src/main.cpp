@@ -13,6 +13,7 @@ const float FLOAT_DIFF_THRESHOLD{0.01f};
 typedef struct Player {
     Vector2 position;
     Vector2 velocity;
+    Vector2 acceleration;
     bool grounded;
 } Player;
 
@@ -23,9 +24,27 @@ bool approximatelyEqual(float a, float b)
 
 void drawTile(float x, float y, Color color)
 {
+    // add 1 since our screen includes out of bounds
     DrawRectangle((x + 1) * TILE_SIZE_PX,
                   (y + 1) * TILE_SIZE_PX,
                   TILE_SIZE_PX,
+                  TILE_SIZE_PX,
+                  color);
+}
+
+void drawHorizontalLineAtTile(int x, int y, Color color, float thickness)
+{
+    DrawRectangle((x + 1) * TILE_SIZE_PX,
+                  (y + 1 + (1 - thickness) / 2) * TILE_SIZE_PX,
+                  TILE_SIZE_PX,
+                  thickness * TILE_SIZE_PX,
+                  color);
+}
+void drawVerticalLineAtTile(int x, int y, Color color, float thickness)
+{
+    DrawRectangle((x + 1 + (1 - thickness) / 2) * TILE_SIZE_PX,
+                  (y + 1) * TILE_SIZE_PX,
+                  thickness * TILE_SIZE_PX,
                   TILE_SIZE_PX,
                   color);
 }
@@ -47,15 +66,12 @@ int main()
         {0, 0, 1, 0, 0, 1, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
     };
-
     Player player{};
-    // player.position = {(float)MAP_WIDTH / 2 - 0.5f,
-    //                    (float)MAP_HEIGHT / 2 - 0.5f};
 
+    // SetTargetFPS(60);
     InitWindow(AppConstants::SCREEN_WIDTH,
                AppConstants::SCREEN_HEIGHT,
                AppConstants::WINDOW_TITLE);
-
     while (!WindowShouldClose())
     {
         float deltaTime = GetFrameTime();
@@ -65,7 +81,7 @@ int main()
         ClearBackground(BLACK);
 
         // ---------------- MAP RENDER ------------------------
-        // TODO: pre generate an iterable so we dont check 0s
+
         for (int y = 0; y < MAP_HEIGHT; y++)
         {
             for (int x = 0; x < MAP_WIDTH; x++)
@@ -76,6 +92,7 @@ int main()
         }
 
         // ---------------- PLAYER LOGIC ------------------------
+
         Vector2 movementInput{};
         if (IsKeyDown(KEY_D))
             movementInput.x += 1;
@@ -86,15 +103,27 @@ int main()
         bool movingDown = player.velocity.y >= 0;
         float playerSpeed = GameConstants::PLAYER_SPEED;
         if (IsKeyDown(KEY_LEFT_SHIFT))
+            playerSpeed *= 0.5f;
+        if (!movementInput.x)
+            player.acceleration.x = player.velocity.x * -8.0f;
+        else
+            player.acceleration.x = movementInput.x * playerSpeed * 2;
+
+        // FIXME: jump height is framerate dependent
+        if (player.grounded)
         {
-            playerSpeed *= 0.1f;
+            if (IsKeyPressed(KEY_SPACE))
+            {
+                player.velocity.y = -9.8f;
+            }
         }
-        player.velocity.x = movementInput.x * playerSpeed;
-        player.velocity.y += (movingDown ? 18.6f : 9.8f) * deltaTime;
-        if (IsKeyPressed(KEY_SPACE) && player.grounded)
+        else
         {
-            player.velocity.y = -9.8f;
+            player.acceleration.y = (movingDown ? 18.6f : 9.8f);
         }
+
+        // physics
+        player.velocity += player.acceleration * deltaTime;
         player.velocity = Vector2ClampValue(player.velocity, 0, 100);
         player.position += player.velocity * deltaTime;
 
@@ -103,12 +132,17 @@ int main()
         int playerGridX = static_cast<int>(player.position.x);
         int playerGridY = static_cast<int>(player.position.y);
 
+        // FIXME: low framerate causes player to collide with non-existent tiles
+
         bool movingRight = player.velocity.x >= 0;
-        if ((movingRight && playerGridX >= MAP_WIDTH - 1) ||
+        bool xAxisAligned = false;
+        bool yAxisAligned = false;
+        if ((movingRight && (playerGridX >= (MAP_WIDTH - 1))) ||
             (player.position.x <= 0))
         {
             player.velocity.x = 0;
             player.position.x = playerGridX;
+            yAxisAligned = true;
         }
         else
         {
@@ -129,6 +163,7 @@ int main()
                 player.velocity.x = 0;
                 player.position.x = playerGridX + (movingRight ? 0 : 1);
             }
+            xAxisAligned = topAxisAligned || bottomAxisAligned;
         }
 
         if ((movingDown && playerGridY >= MAP_HEIGHT - 1) ||
@@ -137,6 +172,7 @@ int main()
             player.velocity.y = 0;
             player.position.y = playerGridY;
             player.grounded = movingDown;
+            xAxisAligned = true;
         }
         else
         {
@@ -162,60 +198,50 @@ int main()
             {
                 player.grounded = false;
             }
-        }
-
-        // get move direction
-        // get tiles in move direction
-        // check if player is axis-aligned
-        // if axis aligned and the corresponding tile is obstructing, freeze
-        // if not aligned to either axis and there is a tile, freeze
-
-        // out of bounds
-        if (player.position.y >= MAP_HEIGHT)
-        {
-            player.position.y = -1;
-        }
-        if (player.position.x >= MAP_WIDTH)
-        {
-            player.position.x = -1;
+            yAxisAligned = leftAxisAligned || rightAxisAligned;
         }
 
         // ---------------- PLAYER RENDER ------------------------
-        // grid position
-        DrawText(TextFormat("(%i %i)", playerGridX, playerGridY),
-                 100,
-                 10,
-                 10,
-                 GREEN);
-
-        // collision visualizers
-        // DrawTile(playerGridX + tileOffsetX,
-        //          playerGridY,
-        //          topTile ? MAROON : GREEN);
-        // DrawTile(playerGridX + tileOffsetX,
-        //          playerGridY + 1,
-        //          bottomTile ? MAROON : GREEN);
-        // DrawTile(playerGridX,
-        //          playerGridY + tileOffsetY,
-        //          leftTile ? PINK : YELLOW);
-        // DrawTile(playerGridX + 1,
-        //          playerGridY + tileOffsetY,
-        //          rightTile ? PINK : YELLOW);
-
-        // cl_showpos
-        DrawText(TextFormat("%.2f\n%.2f\n%.2f\n%.2f\n%s",
-                            player.position.x,
-                            player.position.y,
-                            player.velocity.x,
-                            player.velocity.y,
-                            player.grounded ? "G" : ""),
-                 10,
-                 10,
-                 10,
-                 GREEN);
 
         // player
         drawTile(player.position.x, player.position.y, RED);
+
+        // grid position
+        DrawText(TextFormat("(%i, %i)", playerGridX, playerGridY),
+                 10,
+                 AppConstants::SCREEN_HEIGHT - 20,
+                 10,
+                 GREEN);
+
+        // cl_showpos
+        DrawText(TextFormat("pos_x:%.3f vel_x:%.2f accel_x:%.2f",
+                            player.position.x,
+                            player.velocity.x,
+                            player.acceleration.x),
+                 10,
+                 10,
+                 10,
+                 yAxisAligned ? GREEN : DARKGREEN);
+        DrawText(TextFormat("pos_y:%.3f vel_y:%.2f accel_y:%.2f",
+                            player.position.y,
+                            player.velocity.y,
+                            player.acceleration.y),
+                 10,
+                 20,
+                 10,
+                 xAxisAligned ? GREEN : DARKGREEN);
+
+        // collision visualizers
+        drawHorizontalLineAtTile(playerGridX + 1, playerGridY, ORANGE, 0.2f);
+        drawHorizontalLineAtTile(playerGridX + 1,
+                                 playerGridY + 1,
+                                 ORANGE,
+                                 0.2f);
+        drawVerticalLineAtTile(playerGridX, playerGridY + 1, MAGENTA, 0.2f);
+        drawVerticalLineAtTile(playerGridX + 1, playerGridY + 1, MAGENTA, 0.2f);
+
+        // is grounded
+        DrawText(player.grounded ? "G" : "", 10, 30, 10, GREEN);
 
         EndDrawing();
     }

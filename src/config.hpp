@@ -1,6 +1,6 @@
 #pragma once
 
-const int TILE_SIZE_PX = 64;
+const int TILE_SIZE_PX = 32;
 namespace GameConstants
 {
     const float PLAYER_SPEED = 10;
