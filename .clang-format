@@ -1,7 +1,8 @@
+AllowAllArgumentsOnNextLine: false
 AllowShortBlocksOnASingleLine: Empty
 AllowShortEnumsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: Empty
-AllowShortIfStatementsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: Never
 BinPackArguments: false
 BinPackParameters: OnePerLine
 BreakBeforeBraces: Custom
