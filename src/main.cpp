@@ -1,14 +1,22 @@
 
 #include "config.hpp"
+#include "helpers.hpp"
+#include <algorithm>
 #include <cassert>
-#include <cmath>
-#include <cstdlib>
+#include <cstdio>
+#include <format>
+#include <fstream>
+#include <iostream>
 #include <raylib.h>
 #include <raymath.h>
+#include <string>
 
-const int MAP_WIDTH{10};
-const int MAP_HEIGHT{10};
-const float FLOAT_DIFF_THRESHOLD{0.01f};
+enum TileType {
+    EMPTY,
+    SOLID,
+    START,
+    FINISH,
+};
 
 typedef struct Player {
     Vector2 position;
@@ -17,55 +25,56 @@ typedef struct Player {
     bool grounded;
 } Player;
 
-bool approximatelyEqual(float a, float b)
-{
-    return abs(a - b) < FLOAT_DIFF_THRESHOLD;
-}
-
-void drawTile(float x, float y, Color color)
-{
-    // add 1 since our screen includes out of bounds
-    DrawRectangle((x + 1) * TILE_SIZE_PX,
-                  (y + 1) * TILE_SIZE_PX,
-                  TILE_SIZE_PX,
-                  TILE_SIZE_PX,
-                  color);
-}
-
-void drawHorizontalLineAtTile(int x, int y, Color color, float thickness)
-{
-    DrawRectangle((x + 1) * TILE_SIZE_PX,
-                  (y + 1 + (1 - thickness) / 2) * TILE_SIZE_PX,
-                  TILE_SIZE_PX,
-                  thickness * TILE_SIZE_PX,
-                  color);
-}
-void drawVerticalLineAtTile(int x, int y, Color color, float thickness)
-{
-    DrawRectangle((x + 1 + (1 - thickness) / 2) * TILE_SIZE_PX,
-                  (y + 1) * TILE_SIZE_PX,
-                  thickness * TILE_SIZE_PX,
-                  TILE_SIZE_PX,
-                  color);
-}
+const int LEVEL_WIDTH{10};
+const int LEVEL_HEIGHT{10};
 
 int main()
 {
-    assert(MAP_WIDTH % 2 == 0);
-    assert(MAP_HEIGHT % 2 == 0);
+    SetTraceLogLevel(TraceLogLevel::LOG_WARNING);
 
-    int map[MAP_WIDTH][MAP_HEIGHT] = {
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 1, 0, 0, 1, 0, 1, 1, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 1, 0, 0, 1, 0, 1, 0, 0},
-        {0, 0, 1, 0, 0, 1, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    };
+    assert(LEVEL_WIDTH % 2 == 0);
+    assert(LEVEL_HEIGHT % 2 == 0);
+
+    // ---------------- LEVEL LOADING -------------------
+
+    int levelIndex{1};
+    std::ifstream levelFile{std::format("../levels/{}.txt", levelIndex)};
+    assert(levelFile.is_open() && "failed to load level");
+
+    TileType levelTiles[LEVEL_HEIGHT][LEVEL_WIDTH];
+    int row{};
+    std::string line;
+    while (std::getline(levelFile, line))
+    {
+        int columns{std::min(LEVEL_WIDTH, static_cast<int>(line.length()))};
+        for (int column{}; column < columns; column++)
+        {
+            TileType tileType;
+            switch (line.at(column))
+            {
+            case '1':
+                tileType = TileType::SOLID;
+                break;
+            case 's':
+                tileType = TileType::START;
+                break;
+            case 'f':
+                tileType = TileType::FINISH;
+                break;
+            default:
+                tileType = TileType::EMPTY;
+            }
+            levelTiles[row][column] = tileType;
+        }
+
+        row++;
+        if (row >= LEVEL_HEIGHT)
+        {
+            break;
+        }
+    }
+    levelFile.close();
+
     Player player{};
 
     // SetTargetFPS(60);
@@ -80,14 +89,29 @@ int main()
 
         ClearBackground(BLACK);
 
-        // ---------------- MAP RENDER ------------------------
+        // ---------------- level RENDER ------------------------
 
-        for (int y = 0; y < MAP_HEIGHT; y++)
+        for (int y = 0; y < LEVEL_HEIGHT; y++)
         {
-            for (int x = 0; x < MAP_WIDTH; x++)
+            for (int x = 0; x < LEVEL_WIDTH; x++)
             {
-                if (map[y][x] == 0)
-                    drawTile(x, y, DARKGRAY);
+                Color tileColor{PURPLE};
+                switch (levelTiles[y][x])
+                {
+                case TileType::EMPTY:
+                    tileColor = DARKGRAY;
+                    break;
+                case TileType::SOLID:
+                    tileColor = GRAY;
+                    break;
+                case TileType::START:
+                    tileColor = MAROON;
+                    break;
+                case TileType::FINISH:
+                    tileColor = DARKBLUE;
+                    break;
+                }
+                drawTile(x, y, tileColor);
             }
         }
 
@@ -128,16 +152,17 @@ int main()
         player.position += player.velocity * deltaTime;
 
         // collision
-        // very reliant on the map being grid-based
+        // very reliant on the level being grid-based
         int playerGridX = static_cast<int>(player.position.x);
         int playerGridY = static_cast<int>(player.position.y);
 
-        // FIXME: low framerate causes player to collide with non-existent tiles
+        // FIXME: low framerate causes player to collide with non-existent
+        // tiles
 
         bool movingRight = player.velocity.x >= 0;
         bool xAxisAligned = false;
         bool yAxisAligned = false;
-        if ((movingRight && (playerGridX >= (MAP_WIDTH - 1))) ||
+        if ((movingRight && (playerGridX >= (LEVEL_WIDTH - 1))) ||
             (player.position.x <= 0))
         {
             player.velocity.x = 0;
@@ -147,8 +172,9 @@ int main()
         else
         {
             int tileOffsetX = movingRight ? 1 : 0;
-            int topTile = map[playerGridY][playerGridX + tileOffsetX];
-            int bottomTile = map[playerGridY + 1][playerGridX + tileOffsetX];
+            int topTile = levelTiles[playerGridY][playerGridX + tileOffsetX];
+            int bottomTile =
+                levelTiles[playerGridY + 1][playerGridX + tileOffsetX];
 
             bool topAxisAligned =
                 approximatelyEqual(player.position.y, playerGridY);
@@ -166,7 +192,7 @@ int main()
             xAxisAligned = topAxisAligned || bottomAxisAligned;
         }
 
-        if ((movingDown && playerGridY >= MAP_HEIGHT - 1) ||
+        if ((movingDown && playerGridY >= LEVEL_HEIGHT - 1) ||
             player.position.y <= 0)
         {
             player.velocity.y = 0;
@@ -177,8 +203,9 @@ int main()
         else
         {
             int tileOffsetY = movingDown ? 1 : 0;
-            int leftTile = map[playerGridY + tileOffsetY][playerGridX];
-            int rightTile = map[playerGridY + tileOffsetY][playerGridX + 1];
+            int leftTile = levelTiles[playerGridY + tileOffsetY][playerGridX];
+            int rightTile =
+                levelTiles[playerGridY + tileOffsetY][playerGridX + 1];
 
             bool leftAxisAligned =
                 approximatelyEqual(player.position.x, playerGridX);
