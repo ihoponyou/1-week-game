@@ -6,7 +6,6 @@
 #include <cstdio>
 #include <format>
 #include <fstream>
-#include <iostream>
 #include <raylib.h>
 #include <raymath.h>
 #include <string>
@@ -77,13 +76,13 @@ int main()
 
     Player player{};
 
-    // SetTargetFPS(60);
+    // SetTargetFPS(10);
     InitWindow(AppConstants::SCREEN_WIDTH,
                AppConstants::SCREEN_HEIGHT,
                AppConstants::WINDOW_TITLE);
     while (!WindowShouldClose())
     {
-        float deltaTime = GetFrameTime();
+        float deltaTime = GetFrameTime() * GameConstants::TIME_SCALE;
 
         BeginDrawing();
 
@@ -152,80 +151,46 @@ int main()
         player.position += player.velocity * deltaTime;
 
         // collision
-        // very reliant on the level being grid-based
-        int playerGridX = static_cast<int>(player.position.x);
-        int playerGridY = static_cast<int>(player.position.y);
+        // fails for really low fps
+        int playerGridX{static_cast<int>(player.position.x)};
+        int playerGridY{static_cast<int>(player.position.y)};
 
-        // FIXME: low framerate causes player to collide with non-existent
-        // tiles
-
-        bool movingRight = player.velocity.x >= 0;
-        bool xAxisAligned = false;
-        bool yAxisAligned = false;
-        if ((movingRight && (playerGridX >= (LEVEL_WIDTH - 1))) ||
-            (player.position.x <= 0))
+        // right wall
+        if (levelTiles[playerGridY][playerGridX + 1] == TileType::SOLID ||
+            (!approximatelyEqual(player.position.y, playerGridY) &&
+             levelTiles[playerGridY + 1][playerGridX + 1] == TileType::SOLID))
         {
-            player.velocity.x = 0;
             player.position.x = playerGridX;
-            yAxisAligned = true;
+            player.velocity.x = 0;
         }
-        else
+        // left wall
+        if (levelTiles[playerGridY][playerGridX - 1] == TileType::SOLID ||
+            (false))
         {
-            int tileOffsetX = movingRight ? 1 : 0;
-            int topTile = levelTiles[playerGridY][playerGridX + tileOffsetX];
-            int bottomTile =
-                levelTiles[playerGridY + 1][playerGridX + tileOffsetX];
-
-            bool topAxisAligned =
-                approximatelyEqual(player.position.y, playerGridY);
-            bool bottomAxisAligned =
-                approximatelyEqual(player.position.y, playerGridY + 1);
-
-            if ((topAxisAligned && topTile) ||
-                (bottomAxisAligned && bottomTile) ||
-                ((!topAxisAligned && !bottomAxisAligned) &&
-                 (topTile || bottomTile)))
-            {
-                player.velocity.x = 0;
-                player.position.x = playerGridX + (movingRight ? 0 : 1);
-            }
-            xAxisAligned = topAxisAligned || bottomAxisAligned;
+            player.position.x = playerGridX + 1;
+            player.velocity.x = 0;
         }
 
-        if ((movingDown && playerGridY >= LEVEL_HEIGHT - 1) ||
-            player.position.y <= 0)
+        // ceiling
+        if (levelTiles[playerGridY][playerGridX] == TileType::SOLID ||
+            (!approximatelyEqual(player.position.x, playerGridX) &&
+             levelTiles[playerGridY][playerGridX + 1]) == TileType::SOLID)
         {
+            player.position.y = playerGridY + 1;
             player.velocity.y = 0;
+        }
+        // floor
+        if (levelTiles[playerGridY + 1][playerGridX] == TileType::SOLID ||
+            (!approximatelyEqual(player.position.x, playerGridX) &&
+             levelTiles[playerGridY + 1][playerGridX + 1] == TileType::SOLID))
+        {
             player.position.y = playerGridY;
-            player.grounded = movingDown;
-            xAxisAligned = true;
+            player.velocity.y = 0;
+            player.grounded = true;
         }
         else
         {
-            int tileOffsetY = movingDown ? 1 : 0;
-            int leftTile = levelTiles[playerGridY + tileOffsetY][playerGridX];
-            int rightTile =
-                levelTiles[playerGridY + tileOffsetY][playerGridX + 1];
-
-            bool leftAxisAligned =
-                approximatelyEqual(player.position.x, playerGridX);
-            bool rightAxisAligned =
-                approximatelyEqual(player.position.x, playerGridX + 1);
-
-            if ((leftAxisAligned && leftTile) ||
-                (rightAxisAligned && rightTile) ||
-                (!(leftAxisAligned || rightAxisAligned) &&
-                 (leftTile || rightTile)))
-            {
-                player.velocity.y = 0;
-                player.position.y = playerGridY + (movingDown ? 0 : 1);
-                player.grounded = movingDown;
-            }
-            else
-            {
-                player.grounded = false;
-            }
-            yAxisAligned = leftAxisAligned || rightAxisAligned;
+            player.grounded = false;
         }
 
         // ---------------- PLAYER RENDER ------------------------
@@ -241,22 +206,22 @@ int main()
                  GREEN);
 
         // cl_showpos
-        DrawText(TextFormat("pos_x:%.3f vel_x:%.2f accel_x:%.2f",
-                            player.position.x,
-                            player.velocity.x,
-                            player.acceleration.x),
-                 10,
-                 10,
-                 10,
-                 yAxisAligned ? GREEN : DARKGREEN);
-        DrawText(TextFormat("pos_y:%.3f vel_y:%.2f accel_y:%.2f",
-                            player.position.y,
-                            player.velocity.y,
-                            player.acceleration.y),
-                 10,
-                 20,
-                 10,
-                 xAxisAligned ? GREEN : DARKGREEN);
+        // DrawText(TextFormat("pos_x:%.3f vel_x:%.2f accel_x:%.2f",
+        //                     player.position.x,
+        //                     player.velocity.x,
+        //                     player.acceleration.x),
+        //          10,
+        //          10,
+        //          10,
+        //          yAxisAligned ? GREEN : DARKGREEN);
+        // DrawText(TextFormat("pos_y:%.3f vel_y:%.2f accel_y:%.2f",
+        //                     player.position.y,
+        //                     player.velocity.y,
+        //                     player.acceleration.y),
+        //          10,
+        //          20,
+        //          10,
+        //          xAxisAligned ? GREEN : DARKGREEN);
 
         // collision visualizers
         drawHorizontalLineAtTile(playerGridX + 1, playerGridY, ORANGE, 0.2f);

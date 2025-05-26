@@ -7,7 +7,7 @@ const float FLOAT_DIFF_THRESHOLD{0.01f};
 
 bool approximatelyEqual(float a, float b)
 {
-    return abs(a - b) < FLOAT_DIFF_THRESHOLD;
+    return std::abs(a - b) < FLOAT_DIFF_THRESHOLD;
 }
 
 void drawTile(float x, float y, Color color)
