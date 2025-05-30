@@ -1,12 +1,22 @@
 
 #include "config.hpp"
+#include "helpers.hpp"
+#include <algorithm>
 #include <cassert>
-#include <cmath>
-#include <cstdlib>
+#include <cstdio>
+#include <format>
+#include <fstream>
 #include <raylib.h>
 #include <raymath.h>
+#include <string>
 
-const int LEVEL_WIDTH{10}, LEVEL_HEIGHT{10};
+enum TileType {
+    EMPTY,
+    SOLID,
+    START,
+    FINISH,
+};
+
 
 typedef struct Player {
     Vector2 position;
@@ -14,6 +24,8 @@ typedef struct Player {
     Vector2 acceleration;
     bool grounded;
 } Player;
+
+const int LEVEL_WIDTH{10}, LEVEL_HEIGHT{10};
 
 void drawScaledRectangle(float posX,
                          float posY,
@@ -53,21 +65,51 @@ void drawVerticalLineAtTile(int x, int y, Color color, float thickness)
 
 int main()
 {
+    SetTraceLogLevel(TraceLogLevel::LOG_WARNING);
+
     assert(LEVEL_WIDTH % 2 == 0);
     assert(LEVEL_HEIGHT % 2 == 0);
 
-    int map[LEVEL_WIDTH][LEVEL_HEIGHT] = {
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 1, 0, 0, 1, 0, 1, 1, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 1, 0, 0, 1, 0, 1, 0, 0},
-        {0, 0, 1, 0, 0, 1, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    };
+    // ---------------- LEVEL LOADING -------------------
+
+    int levelIndex{1};
+    std::ifstream levelFile{std::format("../levels/{}.txt", levelIndex)};
+    assert(levelFile.is_open() && "failed to load level");
+
+    TileType levelTiles[LEVEL_HEIGHT][LEVEL_WIDTH];
+    int row{};
+    std::string line;
+    while (std::getline(levelFile, line))
+    {
+        int columns{std::min(LEVEL_WIDTH, static_cast<int>(line.length()))};
+        for (int column{}; column < columns; column++)
+        {
+            TileType tileType;
+            switch (line.at(column))
+            {
+            case '1':
+                tileType = TileType::SOLID;
+                break;
+            case 's':
+                tileType = TileType::START;
+                break;
+            case 'f':
+                tileType = TileType::FINISH;
+                break;
+            default:
+                tileType = TileType::EMPTY;
+            }
+            levelTiles[row][column] = tileType;
+        }
+
+        row++;
+        if (row >= LEVEL_HEIGHT)
+        {
+            break;
+        }
+    }
+    levelFile.close();
+
     Player player{};
 
     InitWindow(AppConstants::SCREEN_WIDTH,
@@ -75,22 +117,35 @@ int main()
                AppConstants::WINDOW_TITLE);
     while (!WindowShouldClose())
     {
-        float dt = GetFrameTime();
+        float dt = GetFrameTime() * GameConstants::TIME_SCALE;
 
         BeginDrawing();
 
         ClearBackground(BLACK);
 
-        // ---------------- MAP RENDER ------------------------
+        // ---------------- level RENDER ------------------------
 
         for (int y = 0; y < LEVEL_HEIGHT; y++)
         {
             for (int x = 0; x < LEVEL_WIDTH; x++)
             {
-                if (map[y][x] == 0)
+                Color tileColor{PURPLE};
+                switch (levelTiles[y][x])
                 {
-                    drawTile(x, y, DARKGRAY);
+                case TileType::EMPTY:
+                    tileColor = DARKGRAY;
+                    break;
+                case TileType::SOLID:
+                    tileColor = GRAY;
+                    break;
+                case TileType::START:
+                    tileColor = MAROON;
+                    break;
+                case TileType::FINISH:
+                    tileColor = DARKBLUE;
+                    break;
                 }
+                drawTile(x, y, tileColor);
             }
         }
 

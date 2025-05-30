@@ -3,6 +3,7 @@
 const int TILE_SIZE_PX = 32;
 namespace GameConstants
 {
+    const float TIME_SCALE = 1.0f;
     const float PLAYER_SPEED = 10;
     const int WORLD_WIDTH = 10;
     const int WORLD_HEIGHT = 10;
