@@ -1,7 +1,5 @@
 
 #include "config.hpp"
-#include "helpers.hpp"
-#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <format>
@@ -16,7 +14,6 @@ enum TileType {
     START,
     FINISH,
 };
-
 
 typedef struct Player {
     Vector2 position;
@@ -211,14 +208,14 @@ int main()
             newPos.x = 0;
             player.velocity.x = 0;
         }
-        else if (map[currentGridY][newGridX] ||
-                 map[(int)(player.position.y + 0.9f)][newGridX])
+        else if (levelTiles[currentGridY][newGridX] ||
+                 levelTiles[(int)(player.position.y + 0.9f)][newGridX])
         {
             newPos.x = newGridX + 1;
             player.velocity.x = 0;
         }
-        else if (map[currentGridY][newGridX + 1] ||
-                 map[(int)(player.position.y + 0.9f)][newGridX + 1])
+        else if (levelTiles[currentGridY][newGridX + 1] ||
+                 levelTiles[(int)(player.position.y + 0.9f)][newGridX + 1])
         {
             newPos.x = newGridX;
             player.velocity.x = 0;
@@ -235,14 +232,14 @@ int main()
             newPos.y = 0;
             player.velocity.y = 0;
         }
-        else if (map[newGridY][currentGridX] ||
-                 map[newGridY][(int)(player.position.x + 0.9f)])
+        else if (levelTiles[newGridY][currentGridX] ||
+                 levelTiles[newGridY][(int)(player.position.x + 0.9f)])
         {
             newPos.y = (player.velocity.y >= 0) ? newGridY - 1 : newGridY + 1;
             player.velocity.y = 0;
         }
-        else if (map[newGridY + 1][currentGridX] ||
-                 map[newGridY + 1][(int)(player.position.x + 0.9f)])
+        else if (levelTiles[newGridY + 1][currentGridX] ||
+                 levelTiles[newGridY + 1][(int)(player.position.x + 0.9f)])
         {
             newPos.y = newGridY;
             player.velocity.y = 0;
