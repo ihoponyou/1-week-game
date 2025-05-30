@@ -1,8 +1,9 @@
 AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: Empty
 AllowShortEnumsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: Empty
-AllowShortIfStatementsOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: false
 BinPackArguments: false
 BinPackParameters: OnePerLine
 BreakBeforeBraces: Custom
@@ -20,6 +21,7 @@ BraceWrapping:
   IndentBraces: false
 FixNamespaceComments: false
 IndentWidth: 4
+InsertBraces: true
 NamespaceIndentation: All
 PointerAlignment: Left
 UseTab: Never
