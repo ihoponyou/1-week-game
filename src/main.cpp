@@ -1,9 +1,10 @@
 
 #include "config.hpp"
+#include <algorithm>
 #include <cassert>
-#include <cstdio>
 #include <format>
 #include <fstream>
+#include <iostream>
 #include <raylib.h>
 #include <raymath.h>
 #include <string>
@@ -20,6 +21,8 @@ typedef struct Player {
     Vector2 velocity;
     Vector2 acceleration;
     bool grounded;
+    bool hasJumped;
+    float airTime;
 } Player;
 
 const int LEVEL_WIDTH{10}, LEVEL_HEIGHT{10};
@@ -60,34 +63,42 @@ void drawVerticalLineAtTile(int x, int y, Color color, float thickness)
                         color);
 }
 
-int main()
+// not sure what convention is for functions that modify parameters
+bool isCollidableTile(TileType map[][LEVEL_HEIGHT],
+                      float x,
+                      float y,
+                      TileType& tileType)
 {
-    SetTraceLogLevel(TraceLogLevel::LOG_WARNING);
+    tileType = map[static_cast<int>(y)][static_cast<int>(x)];
+    return tileType == TileType::SOLID || tileType == TileType::FINISH;
+}
 
-    assert(LEVEL_WIDTH % 2 == 0);
-    assert(LEVEL_HEIGHT % 2 == 0);
+void loadLevel(TileType level[LEVEL_WIDTH][LEVEL_HEIGHT],
+               Player& player,
+               const std::string& levelName)
+{
+    std::string fileName = std::format("../levels/{}.txt", levelName);
+    std::cout << fileName << "\n";
+    std::ifstream levelFile{fileName};
+    assert(levelFile.is_open());
 
-    // ---------------- LEVEL LOADING -------------------
-
-    int levelIndex{1};
-    std::ifstream levelFile{std::format("../levels/{}.txt", levelIndex)};
-    assert(levelFile.is_open() && "failed to load level");
-
-    TileType levelTiles[LEVEL_HEIGHT][LEVEL_WIDTH];
-    int row{};
+    int startX{}, startY{};
+    int x{};
     std::string line;
     while (std::getline(levelFile, line))
     {
         int columns{std::min(LEVEL_WIDTH, static_cast<int>(line.length()))};
-        for (int column{}; column < columns; column++)
+        for (int y{}; y < columns; y++)
         {
             TileType tileType;
-            switch (line.at(column))
+            switch (line.at(y))
             {
             case '1':
                 tileType = TileType::SOLID;
                 break;
             case 's':
+                startX = y;
+                startY = x;
                 tileType = TileType::START;
                 break;
             case 'f':
@@ -96,18 +107,39 @@ int main()
             default:
                 tileType = TileType::EMPTY;
             }
-            levelTiles[row][column] = tileType;
+            level[x][y] = tileType;
         }
 
-        row++;
-        if (row >= LEVEL_HEIGHT)
+        x++;
+        if (x >= LEVEL_HEIGHT)
         {
             break;
         }
     }
-    levelFile.close();
 
+    player.position.x = startX;
+    player.position.y = startY;
+    player.velocity = {};
+
+    levelFile.close();
+}
+void loadLevel(TileType level[LEVEL_WIDTH][LEVEL_HEIGHT],
+               Player& player,
+               int levelIndex)
+{
+    loadLevel(level, player, std::to_string(levelIndex));
+}
+
+int main(int argc, char* argv[])
+{
+    SetTraceLogLevel(TraceLogLevel::LOG_WARNING);
+
+    TileType levelTiles[LEVEL_HEIGHT][LEVEL_WIDTH];
+    int levelIndex{5};
     Player player{};
+    player.hasJumped = false;
+
+    loadLevel(levelTiles, player, levelIndex);
 
     InitWindow(AppConstants::SCREEN_WIDTH,
                AppConstants::SCREEN_HEIGHT,
@@ -136,10 +168,10 @@ int main()
                     tileColor = GRAY;
                     break;
                 case TileType::START:
-                    tileColor = MAROON;
+                    tileColor = DARKBLUE;
                     break;
                 case TileType::FINISH:
-                    tileColor = DARKBLUE;
+                    tileColor = BLUE;
                     break;
                 }
                 drawTile(x, y, tileColor);
@@ -159,44 +191,42 @@ int main()
         }
 
         // acceleration
-        bool movingDown = player.velocity.y >= 0;
-        float playerSpeed = GameConstants::PLAYER_SPEED;
+        float playerSpeed = GameConstants::PLAYER_ACCEL;
         if (IsKeyDown(KEY_LEFT_SHIFT))
         {
             playerSpeed *= 0.5f;
         }
         if (!movementInput.x)
         {
-            player.acceleration.x = player.velocity.x * -8.0f;
+            player.acceleration.x =
+                player.velocity.x * -GameConstants::PLAYER_X_FRICTION;
         }
         else
         {
-            player.acceleration.x = movementInput.x * playerSpeed * 2;
+            player.acceleration.x = movementInput.x * playerSpeed;
         }
 
         // FIXME: jump height is framerate dependent
-        if (player.grounded)
+        player.acceleration.y = GameConstants::GRAVITY;
+        if (IsKeyPressed(KEY_SPACE) && !player.hasJumped &&
+            player.airTime < GameConstants::COYOTE_TIME)
         {
-            if (IsKeyPressed(KEY_SPACE))
-            {
-                player.velocity.y = -9.8f;
-            }
-        }
-        else
-        {
-            player.acceleration.y = (movingDown ? 18.6f : 9.8f);
+            player.hasJumped = true;
+            player.velocity.y = -GameConstants::JUMP_POWER;
         }
 
         // physics
         player.velocity += player.acceleration * dt;
-        player.velocity = Vector2ClampValue(player.velocity, 0, 100);
+        player.velocity.x = std::clamp(player.velocity.x,
+                                       -GameConstants::MAX_PLAYER_SPEED,
+                                       GameConstants::MAX_PLAYER_SPEED);
 
         // collision
         player.grounded = false;
+        player.airTime += dt;
 
+        TileType collidedTileType{};
         Vector2 newPos{player.position + player.velocity * dt};
-        int currentGridX{(int)player.position.x},
-            currentGridY{(int)player.position.y};
         int newGridX{(int)newPos.x}, newGridY{(int)newPos.y};
         if (newPos.x + 1 >= LEVEL_WIDTH)
         {
@@ -208,15 +238,39 @@ int main()
             newPos.x = 0;
             player.velocity.x = 0;
         }
-        else if (levelTiles[currentGridY][newGridX] ||
-                 levelTiles[(int)(player.position.y + 0.9f)][newGridX])
+        else if (isCollidableTile(levelTiles,
+                                  newPos.x,
+                                  player.position.y,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  newPos.x,
+                                  player.position.y + 0.9f,
+                                  collidedTileType))
         {
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+
             newPos.x = newGridX + 1;
             player.velocity.x = 0;
         }
-        else if (levelTiles[currentGridY][newGridX + 1] ||
-                 levelTiles[(int)(player.position.y + 0.9f)][newGridX + 1])
+        else if (isCollidableTile(levelTiles,
+                                  newGridX + 1,
+                                  player.position.y,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  newGridX + 1,
+                                  player.position.y + 0.9f,
+                                  collidedTileType))
         {
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+
             newPos.x = newGridX;
             player.velocity.x = 0;
         }
@@ -232,18 +286,51 @@ int main()
             newPos.y = 0;
             player.velocity.y = 0;
         }
-        else if (levelTiles[newGridY][currentGridX] ||
-                 levelTiles[newGridY][(int)(player.position.x + 0.9f)])
+        else if (isCollidableTile(levelTiles,
+                                  player.position.x,
+                                  newGridY,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  player.position.x + 0.9f,
+                                  newGridY,
+                                  collidedTileType))
         {
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+
             newPos.y = (player.velocity.y >= 0) ? newGridY - 1 : newGridY + 1;
             player.velocity.y = 0;
         }
-        else if (levelTiles[newGridY + 1][currentGridX] ||
-                 levelTiles[newGridY + 1][(int)(player.position.x + 0.9f)])
+        else if (isCollidableTile(levelTiles,
+                                  player.position.x,
+                                  newGridY + 1,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  player.position.x + 0.9f,
+                                  newGridY + 1,
+                                  collidedTileType))
         {
-            newPos.y = newGridY;
-            player.velocity.y = 0;
-            player.grounded = true;
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+
+            if (player.velocity.y > 0)
+            {
+                newPos.y = newGridY;
+                player.velocity.y = 0;
+                player.grounded = true;
+            }
+        }
+
+        if (player.grounded)
+        {
+            player.airTime = 0;
+            player.hasJumped = false;
         }
 
         player.position = newPos;
