@@ -135,7 +135,7 @@ int main(int argc, char* argv[])
     SetTraceLogLevel(TraceLogLevel::LOG_WARNING);
 
     TileType levelTiles[LEVEL_HEIGHT][LEVEL_WIDTH];
-    int levelIndex{5};
+    int levelIndex{6};
     Player player{};
     player.hasJumped = false;
 
@@ -144,6 +144,11 @@ int main(int argc, char* argv[])
     InitWindow(AppConstants::SCREEN_WIDTH,
                AppConstants::SCREEN_HEIGHT,
                AppConstants::WINDOW_TITLE);
+
+    Image icon = LoadImage("../resources/icon.png");
+    SetWindowIcon(icon);
+    Texture2D texture = LoadTextureFromImage(icon);
+
     while (!WindowShouldClose())
     {
         float dt = GetFrameTime() * GameConstants::TIME_SCALE;
@@ -151,6 +156,13 @@ int main(int argc, char* argv[])
         BeginDrawing();
 
         ClearBackground(BLACK);
+
+        if (levelIndex >= 6)
+        {
+            DrawTexture(texture, 0, 0, WHITE);
+            EndDrawing();
+            continue;
+        }
 
         // ---------------- level RENDER ------------------------
 
@@ -345,6 +357,8 @@ int main(int argc, char* argv[])
 
         EndDrawing();
     }
+
+    UnloadTexture(texture);
 
     CloseWindow();
 
