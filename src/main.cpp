@@ -448,6 +448,54 @@ int main(int argc, char* argv[])
                      TILE_SIZE_PX,
                      BLACK);
         }
+        else if (isCollidableTile(levelTiles,
+                                  player.position.x,
+                                  newGridY,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  player.position.x + 0.9f,
+                                  newGridY,
+                                  collidedTileType))
+        {
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+
+            newPos.y = (player.velocity.y >= 0) ? newGridY - 1 : newGridY + 1;
+            player.velocity.y = 0;
+        }
+        else if (isCollidableTile(levelTiles,
+                                  player.position.x,
+                                  newGridY + 1,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  player.position.x + 0.9f,
+                                  newGridY + 1,
+                                  collidedTileType))
+        {
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+
+            if (player.velocity.y > 0)
+            {
+                newPos.y = newGridY;
+                player.velocity.y = 0;
+                player.grounded = true;
+            }
+        }
+
+        if (player.grounded)
+        {
+            player.airTime = 0;
+            player.hasJumped = false;
+        }
+
+        player.position = newPos;
 
         // ---------------- PLAYER RENDER ------------------------
 
