@@ -173,7 +173,7 @@ int main(int argc, char* argv[])
 
     Music music =
         LoadMusicStream(AppConstants::GET_ASSET_PATH("music.wav").c_str());
-    SetMusicVolume(music, 5);
+    // SetMusicVolume(music, 5);
     SetMusicPitch(music, 1.8f);
     float timePlayed{0.0f};
 
@@ -200,7 +200,7 @@ int main(int argc, char* argv[])
             float modifier{2 - timePlayed};
             float alpha{timePlayed * 2 * PI * modifier};
 
-            SetMusicPan(music, sin(alpha * 30) + 0.5f);
+            SetMusicPan(music, sin(alpha * 30) * 0.5f + 0.5f);
             UpdateMusicStream(music);
             // std::cout << timePlayed << "\n";
 
