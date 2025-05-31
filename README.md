@@ -2,32 +2,16 @@
 
 ## building
 
-with terminal:
 ```
 mkdir -p build
 cd build
 cmake ..
-cmake --build ./build --config <Debug|Release> --target game -j 10 --
-```
-
-with bash:
-```
-sh build.sh <Debug|Release>
-```
-
-with just:
-```
-just build-<debug|release>
+cmake --build . --target game -j 10 --
 ```
 
 ## playing
 
-with terminal:
+(in build directory)
 ```
-./build/game.exe
-```
-
-with just:
-```
-just play
+./game
 ```

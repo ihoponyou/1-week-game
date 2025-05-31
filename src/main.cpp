@@ -2,6 +2,8 @@
 #include "config.hpp"
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstdlib>
 #include <format>
 #include <fstream>
 #include <iostream>
@@ -14,6 +16,7 @@ enum TileType {
     SOLID,
     START,
     FINISH,
+    FAIL,
 };
 
 typedef struct Player {
@@ -70,15 +73,18 @@ bool isCollidableTile(TileType map[][LEVEL_HEIGHT],
                       TileType& tileType)
 {
     tileType = map[static_cast<int>(y)][static_cast<int>(x)];
-    return tileType == TileType::SOLID || tileType == TileType::FINISH;
+    return tileType == TileType::SOLID || tileType == TileType::FINISH ||
+           tileType == TileType::FAIL;
 }
 
 void loadLevel(TileType level[LEVEL_WIDTH][LEVEL_HEIGHT],
                Player& player,
                const std::string& levelName)
 {
-    std::string fileName = std::format("../levels/{}.txt", levelName);
-    std::cout << fileName << "\n";
+    std::string fileName =
+        AppConstants::GET_ASSET_PATH(std::format("levels/{}.txt", levelName));
+    // std::cout << ASSETS_PATH << "\n";
+    // std::cout << fileName << "\n";
     std::ifstream levelFile{fileName};
     assert(levelFile.is_open());
 
@@ -104,6 +110,9 @@ void loadLevel(TileType level[LEVEL_WIDTH][LEVEL_HEIGHT],
             case 'f':
                 tileType = TileType::FINISH;
                 break;
+            case 'X':
+                tileType = TileType::FAIL;
+                break;
             default:
                 tileType = TileType::EMPTY;
             }
@@ -127,6 +136,7 @@ void loadLevel(TileType level[LEVEL_WIDTH][LEVEL_HEIGHT],
                Player& player,
                int levelIndex)
 {
+    assert(levelIndex > 0);
     loadLevel(level, player, std::to_string(levelIndex));
 }
 
@@ -135,47 +145,78 @@ int main(int argc, char* argv[])
     SetTraceLogLevel(TraceLogLevel::LOG_WARNING);
 
     TileType levelTiles[LEVEL_HEIGHT][LEVEL_WIDTH];
-    int levelIndex{5};
+    int levelIndex{1};
     Player player{};
     player.hasJumped = false;
 
+    if (argc > 0)
+    {
+        // FIXME: Lol
+        levelIndex = argv[1][0] - '0';
+    }
     loadLevel(levelTiles, player, levelIndex);
 
+    bool quit{false};
     InitWindow(AppConstants::SCREEN_WIDTH,
                AppConstants::SCREEN_HEIGHT,
                AppConstants::WINDOW_TITLE);
-    while (!WindowShouldClose())
+
+    Image icon = LoadImage(AppConstants::GET_ASSET_PATH("icon.png").c_str());
+    SetWindowIcon(icon);
+    Vector2 iconSize{AppConstants::SCREEN_WIDTH / 5,
+                     AppConstants::SCREEN_HEIGHT / 5};
+
+    ImageResize(&icon, iconSize.x, iconSize.y);
+    Texture2D texture = LoadTextureFromImage(icon);
+
+    InitAudioDevice();
+
+    Music music =
+        LoadMusicStream(AppConstants::GET_ASSET_PATH("music.wav").c_str());
+    SetMusicVolume(music, 5);
+    SetMusicPitch(music, 1.8f);
+    float timePlayed{0.0f};
+
+    while (!quit)
     {
         float dt = GetFrameTime() * GameConstants::TIME_SCALE;
+        quit = WindowShouldClose();
 
-        BeginDrawing();
-
-        ClearBackground(BLACK);
-
-        // ---------------- level RENDER ------------------------
-
-        for (int y = 0; y < LEVEL_HEIGHT; y++)
+        if (levelIndex >= 6)
         {
-            for (int x = 0; x < LEVEL_WIDTH; x++)
+            if (!IsMusicStreamPlaying(music))
             {
-                Color tileColor{PURPLE};
-                switch (levelTiles[y][x])
-                {
-                case TileType::EMPTY:
-                    tileColor = DARKGRAY;
-                    break;
-                case TileType::SOLID:
-                    tileColor = GRAY;
-                    break;
-                case TileType::START:
-                    tileColor = DARKBLUE;
-                    break;
-                case TileType::FINISH:
-                    tileColor = BLUE;
-                    break;
-                }
-                drawTile(x, y, tileColor);
+                PlayMusicStream(music);
+                // SeekMusicStream(music, 150.0f);
             }
+
+            timePlayed = GetMusicTimePlayed(music) / GetMusicTimeLength(music);
+            if (1 - timePlayed < 0.001f)
+            {
+                quit = true;
+                continue;
+            }
+
+            float modifier{2 - timePlayed};
+            float alpha{timePlayed * 2 * PI * modifier};
+
+            SetMusicPan(music, sin(alpha * 30) + 0.5f);
+            UpdateMusicStream(music);
+            // std::cout << timePlayed << "\n";
+
+            BeginDrawing();
+
+            ClearBackground(BLACK);
+
+            float y{AppConstants::SCREEN_HEIGHT - iconSize.y};
+            DrawTexture(texture,
+                        (AppConstants::SCREEN_WIDTH - iconSize.x) / 2,
+                        y + y * -abs(sin(alpha * 100)),
+                        WHITE);
+
+            EndDrawing();
+
+            continue;
         }
 
         // ---------------- PLAYER LOGIC ------------------------
@@ -252,6 +293,12 @@ int main(int argc, char* argv[])
                 loadLevel(levelTiles, player, ++levelIndex);
                 continue;
             }
+            else if (collidedTileType == TileType::FAIL)
+            {
+                levelIndex = 1;
+                loadLevel(levelTiles, player, 1);
+                continue;
+            }
 
             newPos.x = newGridX + 1;
             player.velocity.x = 0;
@@ -270,6 +317,12 @@ int main(int argc, char* argv[])
                 loadLevel(levelTiles, player, ++levelIndex);
                 continue;
             }
+            else if (collidedTileType == TileType::FAIL)
+            {
+                levelIndex = 1;
+                loadLevel(levelTiles, player, 1);
+                continue;
+            }
 
             newPos.x = newGridX;
             player.velocity.x = 0;
@@ -285,6 +338,115 @@ int main(int argc, char* argv[])
         {
             newPos.y = 0;
             player.velocity.y = 0;
+        }
+        else if (isCollidableTile(levelTiles,
+                                  player.position.x,
+                                  newGridY,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  player.position.x + 0.9f,
+                                  newGridY,
+                                  collidedTileType))
+        {
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+            else if (collidedTileType == TileType::FAIL)
+            {
+                levelIndex = 1;
+                loadLevel(levelTiles, player, 1);
+                continue;
+            }
+
+            newPos.y = (player.velocity.y >= 0) ? newGridY - 1 : newGridY + 1;
+            player.velocity.y = 0;
+        }
+        else if (isCollidableTile(levelTiles,
+                                  player.position.x,
+                                  newGridY + 1,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  player.position.x + 0.9f,
+                                  newGridY + 1,
+                                  collidedTileType))
+        {
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+            else if (collidedTileType == TileType::FAIL)
+            {
+                levelIndex = 1;
+                loadLevel(levelTiles, player, 1);
+                continue;
+            }
+
+            if (player.velocity.y > 0)
+            {
+                newPos.y = newGridY;
+                player.velocity.y = 0;
+                player.grounded = true;
+            }
+        }
+
+        if (player.grounded)
+        {
+            player.airTime = 0;
+            player.hasJumped = false;
+        }
+
+        player.position = newPos;
+
+        // ---------------- LEVEL RENDER ------------------------
+        BeginDrawing();
+
+        ClearBackground(BLACK);
+
+        for (int y = 0; y < LEVEL_HEIGHT; y++)
+        {
+            for (int x = 0; x < LEVEL_WIDTH; x++)
+            {
+                Color tileColor{PURPLE};
+                switch (levelTiles[y][x])
+                {
+                case TileType::EMPTY:
+                    tileColor = DARKGRAY;
+                    break;
+                case TileType::SOLID:
+                    tileColor = GRAY;
+                    break;
+                case TileType::START:
+                    tileColor = DARKBLUE;
+                    break;
+                case TileType::FINISH:
+                    tileColor = BLUE;
+                    break;
+                case TileType::FAIL:
+                    tileColor = ORANGE;
+                    break;
+                }
+                drawTile(x, y, tileColor);
+            }
+        }
+
+        if (levelIndex == 1)
+        {
+            DrawText("A <-\nD ->",
+                     AppConstants::SCREEN_WIDTH / 2 - TILE_SIZE_PX,
+                     TILE_SIZE_PX * 4,
+                     TILE_SIZE_PX,
+                     BLACK);
+        }
+        else if (levelIndex == 2)
+        {
+            DrawText("Space ^",
+                     AppConstants::SCREEN_WIDTH / 2,
+                     TILE_SIZE_PX * 2,
+                     TILE_SIZE_PX,
+                     BLACK);
         }
         else if (isCollidableTile(levelTiles,
                                   player.position.x,
@@ -345,6 +507,12 @@ int main(int argc, char* argv[])
 
         EndDrawing();
     }
+
+    UnloadMusicStream(music);
+
+    CloseAudioDevice();
+
+    UnloadTexture(texture);
 
     CloseWindow();
 
