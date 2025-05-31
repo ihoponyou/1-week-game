@@ -3,9 +3,15 @@
 const int TILE_SIZE_PX = 32;
 namespace GameConstants
 {
-    const float PLAYER_SPEED = 10;
+    const float TIME_SCALE = 1.0f;
+    const float PLAYER_ACCEL = 16;
+    const float MAX_PLAYER_SPEED = 8;
+    const float GRAVITY = 32;
+    const float JUMP_POWER = 14;
+    const float PLAYER_X_FRICTION = 10;
     const int WORLD_WIDTH = 10;
     const int WORLD_HEIGHT = 10;
+    const float COYOTE_TIME = 0.05f;
 }
 
 namespace AppConstants

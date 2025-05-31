@@ -1,93 +1,180 @@
 
 #include "config.hpp"
+#include <algorithm>
 #include <cassert>
-#include <cmath>
-#include <cstdlib>
+#include <format>
+#include <fstream>
+#include <iostream>
 #include <raylib.h>
 #include <raymath.h>
+#include <string>
 
-const int MAP_WIDTH{10};
-const int MAP_HEIGHT{10};
-const float FLOAT_DIFF_THRESHOLD{0.01f};
+enum TileType {
+    EMPTY,
+    SOLID,
+    START,
+    FINISH,
+};
 
 typedef struct Player {
     Vector2 position;
     Vector2 velocity;
     Vector2 acceleration;
     bool grounded;
+    bool hasJumped;
+    float airTime;
 } Player;
 
-bool approximatelyEqual(float a, float b)
+const int LEVEL_WIDTH{10}, LEVEL_HEIGHT{10};
+
+void drawScaledRectangle(float posX,
+                         float posY,
+                         float width,
+                         float height,
+                         Color color)
 {
-    return abs(a - b) < FLOAT_DIFF_THRESHOLD;
+    DrawRectangle(TILE_SIZE_PX * posX,
+                  TILE_SIZE_PX * posY,
+                  TILE_SIZE_PX * width,
+                  TILE_SIZE_PX * height,
+                  color);
 }
 
 void drawTile(float x, float y, Color color)
 {
     // add 1 since our screen includes out of bounds
-    DrawRectangle((x + 1) * TILE_SIZE_PX,
-                  (y + 1) * TILE_SIZE_PX,
-                  TILE_SIZE_PX,
-                  TILE_SIZE_PX,
-                  color);
+    drawScaledRectangle(x + 1, y + 1, 1, 1, color);
 }
 
 void drawHorizontalLineAtTile(int x, int y, Color color, float thickness)
 {
-    DrawRectangle((x + 1) * TILE_SIZE_PX,
-                  (y + 1 + (1 - thickness) / 2) * TILE_SIZE_PX,
-                  TILE_SIZE_PX,
-                  thickness * TILE_SIZE_PX,
-                  color);
+    drawScaledRectangle(x + 1,
+                        y + 1 + (1 - thickness) / 2,
+                        1,
+                        thickness,
+                        color);
 }
 void drawVerticalLineAtTile(int x, int y, Color color, float thickness)
 {
-    DrawRectangle((x + 1 + (1 - thickness) / 2) * TILE_SIZE_PX,
-                  (y + 1) * TILE_SIZE_PX,
-                  thickness * TILE_SIZE_PX,
-                  TILE_SIZE_PX,
-                  color);
+    drawScaledRectangle(x + 1 + (1 - thickness) / 2,
+                        y + 1,
+                        thickness,
+                        1,
+                        color);
 }
 
-int main()
+// not sure what convention is for functions that modify parameters
+bool isCollidableTile(TileType map[][LEVEL_HEIGHT],
+                      float x,
+                      float y,
+                      TileType& tileType)
 {
-    assert(MAP_WIDTH % 2 == 0);
-    assert(MAP_HEIGHT % 2 == 0);
+    tileType = map[static_cast<int>(y)][static_cast<int>(x)];
+    return tileType == TileType::SOLID || tileType == TileType::FINISH;
+}
 
-    int map[MAP_WIDTH][MAP_HEIGHT] = {
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 1, 0, 0, 1, 0, 1, 1, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 1, 0, 0, 1, 0, 1, 0, 0},
-        {0, 0, 1, 0, 0, 1, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    };
+void loadLevel(TileType level[LEVEL_WIDTH][LEVEL_HEIGHT],
+               Player& player,
+               const std::string& levelName)
+{
+    std::string fileName = std::format("../levels/{}.txt", levelName);
+    std::cout << fileName << "\n";
+    std::ifstream levelFile{fileName};
+    assert(levelFile.is_open());
+
+    int startX{}, startY{};
+    int x{};
+    std::string line;
+    while (std::getline(levelFile, line))
+    {
+        int columns{std::min(LEVEL_WIDTH, static_cast<int>(line.length()))};
+        for (int y{}; y < columns; y++)
+        {
+            TileType tileType;
+            switch (line.at(y))
+            {
+            case '1':
+                tileType = TileType::SOLID;
+                break;
+            case 's':
+                startX = y;
+                startY = x;
+                tileType = TileType::START;
+                break;
+            case 'f':
+                tileType = TileType::FINISH;
+                break;
+            default:
+                tileType = TileType::EMPTY;
+            }
+            level[x][y] = tileType;
+        }
+
+        x++;
+        if (x >= LEVEL_HEIGHT)
+        {
+            break;
+        }
+    }
+
+    player.position.x = startX;
+    player.position.y = startY;
+    player.velocity = {};
+
+    levelFile.close();
+}
+void loadLevel(TileType level[LEVEL_WIDTH][LEVEL_HEIGHT],
+               Player& player,
+               int levelIndex)
+{
+    loadLevel(level, player, std::to_string(levelIndex));
+}
+
+int main(int argc, char* argv[])
+{
+    SetTraceLogLevel(TraceLogLevel::LOG_WARNING);
+
+    TileType levelTiles[LEVEL_HEIGHT][LEVEL_WIDTH];
+    int levelIndex{5};
     Player player{};
+    player.hasJumped = false;
 
-    // SetTargetFPS(60);
+    loadLevel(levelTiles, player, levelIndex);
+
     InitWindow(AppConstants::SCREEN_WIDTH,
                AppConstants::SCREEN_HEIGHT,
                AppConstants::WINDOW_TITLE);
     while (!WindowShouldClose())
     {
-        float deltaTime = GetFrameTime();
+        float dt = GetFrameTime() * GameConstants::TIME_SCALE;
 
         BeginDrawing();
 
         ClearBackground(BLACK);
 
-        // ---------------- MAP RENDER ------------------------
+        // ---------------- level RENDER ------------------------
 
-        for (int y = 0; y < MAP_HEIGHT; y++)
+        for (int y = 0; y < LEVEL_HEIGHT; y++)
         {
-            for (int x = 0; x < MAP_WIDTH; x++)
+            for (int x = 0; x < LEVEL_WIDTH; x++)
             {
-                if (map[y][x] == 0)
-                    drawTile(x, y, DARKGRAY);
+                Color tileColor{PURPLE};
+                switch (levelTiles[y][x])
+                {
+                case TileType::EMPTY:
+                    tileColor = DARKGRAY;
+                    break;
+                case TileType::SOLID:
+                    tileColor = GRAY;
+                    break;
+                case TileType::START:
+                    tileColor = DARKBLUE;
+                    break;
+                case TileType::FINISH:
+                    tileColor = BLUE;
+                    break;
+                }
+                drawTile(x, y, tileColor);
             }
         }
 
@@ -95,150 +182,163 @@ int main()
 
         Vector2 movementInput{};
         if (IsKeyDown(KEY_D))
+        {
             movementInput.x += 1;
+        }
         if (IsKeyDown(KEY_A))
+        {
             movementInput.x -= 1;
+        }
 
         // acceleration
-        bool movingDown = player.velocity.y >= 0;
-        float playerSpeed = GameConstants::PLAYER_SPEED;
+        float playerSpeed = GameConstants::PLAYER_ACCEL;
         if (IsKeyDown(KEY_LEFT_SHIFT))
-            playerSpeed *= 0.5f;
-        if (!movementInput.x)
-            player.acceleration.x = player.velocity.x * -8.0f;
-        else
-            player.acceleration.x = movementInput.x * playerSpeed * 2;
-
-        // FIXME: jump height is framerate dependent
-        if (player.grounded)
         {
-            if (IsKeyPressed(KEY_SPACE))
-            {
-                player.velocity.y = -9.8f;
-            }
+            playerSpeed *= 0.5f;
+        }
+        if (!movementInput.x)
+        {
+            player.acceleration.x =
+                player.velocity.x * -GameConstants::PLAYER_X_FRICTION;
         }
         else
         {
-            player.acceleration.y = (movingDown ? 18.6f : 9.8f);
+            player.acceleration.x = movementInput.x * playerSpeed;
+        }
+
+        // FIXME: jump height is framerate dependent
+        player.acceleration.y = GameConstants::GRAVITY;
+        if (IsKeyPressed(KEY_SPACE) && !player.hasJumped &&
+            player.airTime < GameConstants::COYOTE_TIME)
+        {
+            player.hasJumped = true;
+            player.velocity.y = -GameConstants::JUMP_POWER;
         }
 
         // physics
-        player.velocity += player.acceleration * deltaTime;
-        player.velocity = Vector2ClampValue(player.velocity, 0, 100);
-        player.position += player.velocity * deltaTime;
+        player.velocity += player.acceleration * dt;
+        player.velocity.x = std::clamp(player.velocity.x,
+                                       -GameConstants::MAX_PLAYER_SPEED,
+                                       GameConstants::MAX_PLAYER_SPEED);
 
         // collision
-        // very reliant on the map being grid-based
-        int playerGridX = static_cast<int>(player.position.x);
-        int playerGridY = static_cast<int>(player.position.y);
+        player.grounded = false;
+        player.airTime += dt;
 
-        // FIXME: low framerate causes player to collide with non-existent tiles
-
-        bool movingRight = player.velocity.x >= 0;
-        bool xAxisAligned = false;
-        bool yAxisAligned = false;
-        if ((movingRight && (playerGridX >= (MAP_WIDTH - 1))) ||
-            (player.position.x <= 0))
+        TileType collidedTileType{};
+        Vector2 newPos{player.position + player.velocity * dt};
+        int newGridX{(int)newPos.x}, newGridY{(int)newPos.y};
+        if (newPos.x + 1 >= LEVEL_WIDTH)
         {
+            newPos.x = newGridX;
             player.velocity.x = 0;
-            player.position.x = playerGridX;
-            yAxisAligned = true;
         }
-        else
+        else if (newPos.x < 0)
         {
-            int tileOffsetX = movingRight ? 1 : 0;
-            int topTile = map[playerGridY][playerGridX + tileOffsetX];
-            int bottomTile = map[playerGridY + 1][playerGridX + tileOffsetX];
-
-            bool topAxisAligned =
-                approximatelyEqual(player.position.y, playerGridY);
-            bool bottomAxisAligned =
-                approximatelyEqual(player.position.y, playerGridY + 1);
-
-            if ((topAxisAligned && topTile) ||
-                (bottomAxisAligned && bottomTile) ||
-                ((!topAxisAligned && !bottomAxisAligned) &&
-                 (topTile || bottomTile)))
+            newPos.x = 0;
+            player.velocity.x = 0;
+        }
+        else if (isCollidableTile(levelTiles,
+                                  newPos.x,
+                                  player.position.y,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  newPos.x,
+                                  player.position.y + 0.9f,
+                                  collidedTileType))
+        {
+            if (collidedTileType == TileType::FINISH)
             {
-                player.velocity.x = 0;
-                player.position.x = playerGridX + (movingRight ? 0 : 1);
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
             }
-            xAxisAligned = topAxisAligned || bottomAxisAligned;
+
+            newPos.x = newGridX + 1;
+            player.velocity.x = 0;
+        }
+        else if (isCollidableTile(levelTiles,
+                                  newGridX + 1,
+                                  player.position.y,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  newGridX + 1,
+                                  player.position.y + 0.9f,
+                                  collidedTileType))
+        {
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+
+            newPos.x = newGridX;
+            player.velocity.x = 0;
         }
 
-        if ((movingDown && playerGridY >= MAP_HEIGHT - 1) ||
-            player.position.y <= 0)
+        if (newPos.y + 1 >= LEVEL_HEIGHT)
         {
+            newPos.y = newGridY;
             player.velocity.y = 0;
-            player.position.y = playerGridY;
-            player.grounded = movingDown;
-            xAxisAligned = true;
+            player.grounded = true;
         }
-        else
+        else if (newPos.y < 0)
         {
-            int tileOffsetY = movingDown ? 1 : 0;
-            int leftTile = map[playerGridY + tileOffsetY][playerGridX];
-            int rightTile = map[playerGridY + tileOffsetY][playerGridX + 1];
-
-            bool leftAxisAligned =
-                approximatelyEqual(player.position.x, playerGridX);
-            bool rightAxisAligned =
-                approximatelyEqual(player.position.x, playerGridX + 1);
-
-            if ((leftAxisAligned && leftTile) ||
-                (rightAxisAligned && rightTile) ||
-                (!(leftAxisAligned || rightAxisAligned) &&
-                 (leftTile || rightTile)))
-            {
-                player.velocity.y = 0;
-                player.position.y = playerGridY + (movingDown ? 0 : 1);
-                player.grounded = movingDown;
-            }
-            else
-            {
-                player.grounded = false;
-            }
-            yAxisAligned = leftAxisAligned || rightAxisAligned;
+            newPos.y = 0;
+            player.velocity.y = 0;
         }
+        else if (isCollidableTile(levelTiles,
+                                  player.position.x,
+                                  newGridY,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  player.position.x + 0.9f,
+                                  newGridY,
+                                  collidedTileType))
+        {
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+
+            newPos.y = (player.velocity.y >= 0) ? newGridY - 1 : newGridY + 1;
+            player.velocity.y = 0;
+        }
+        else if (isCollidableTile(levelTiles,
+                                  player.position.x,
+                                  newGridY + 1,
+                                  collidedTileType) ||
+                 isCollidableTile(levelTiles,
+                                  player.position.x + 0.9f,
+                                  newGridY + 1,
+                                  collidedTileType))
+        {
+            if (collidedTileType == TileType::FINISH)
+            {
+                loadLevel(levelTiles, player, ++levelIndex);
+                continue;
+            }
+
+            if (player.velocity.y > 0)
+            {
+                newPos.y = newGridY;
+                player.velocity.y = 0;
+                player.grounded = true;
+            }
+        }
+
+        if (player.grounded)
+        {
+            player.airTime = 0;
+            player.hasJumped = false;
+        }
+
+        player.position = newPos;
 
         // ---------------- PLAYER RENDER ------------------------
 
         // player
         drawTile(player.position.x, player.position.y, RED);
-
-        // grid position
-        DrawText(TextFormat("(%i, %i)", playerGridX, playerGridY),
-                 10,
-                 AppConstants::SCREEN_HEIGHT - 20,
-                 10,
-                 GREEN);
-
-        // cl_showpos
-        DrawText(TextFormat("pos_x:%.3f vel_x:%.2f accel_x:%.2f",
-                            player.position.x,
-                            player.velocity.x,
-                            player.acceleration.x),
-                 10,
-                 10,
-                 10,
-                 yAxisAligned ? GREEN : DARKGREEN);
-        DrawText(TextFormat("pos_y:%.3f vel_y:%.2f accel_y:%.2f",
-                            player.position.y,
-                            player.velocity.y,
-                            player.acceleration.y),
-                 10,
-                 20,
-                 10,
-                 xAxisAligned ? GREEN : DARKGREEN);
-
-        // collision visualizers
-        drawHorizontalLineAtTile(playerGridX + 1, playerGridY, ORANGE, 0.2f);
-        drawHorizontalLineAtTile(playerGridX + 1,
-                                 playerGridY + 1,
-                                 ORANGE,
-                                 0.2f);
-        drawVerticalLineAtTile(playerGridX, playerGridY + 1, MAGENTA, 0.2f);
-        drawVerticalLineAtTile(playerGridX + 1, playerGridY + 1, MAGENTA, 0.2f);
 
         // is grounded
         DrawText(player.grounded ? "G" : "", 10, 30, 10, GREEN);
