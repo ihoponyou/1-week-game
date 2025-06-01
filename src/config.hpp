@@ -18,7 +18,7 @@ namespace GameConstants
 
 namespace AppConstants
 {
-    const char* const WINDOW_TITLE = "1 week game";
+    const char* const WINDOW_TITLE = "\"1\" week game";
 
     const int SCREEN_WIDTH = (GameConstants::WORLD_WIDTH + 2) * TILE_SIZE_PX;
     const int SCREEN_HEIGHT = (GameConstants::WORLD_HEIGHT + 2) * TILE_SIZE_PX;

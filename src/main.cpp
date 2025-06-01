@@ -179,6 +179,7 @@ int main(int argc, char* argv[])
     while (!quit)
     {
         float dt = GetFrameTime() * GameConstants::TIME_SCALE;
+        //std::cout << player.position.y << "\n";
         quit = WindowShouldClose();
 
         if (levelIndex >= 6)
@@ -268,7 +269,8 @@ int main(int argc, char* argv[])
         TileType collidedTileType{};
         Vector2 newPos{player.position + player.velocity * dt};
         int newGridX{(int)newPos.x}, newGridY{(int)newPos.y};
-        if (newPos.x + 1 >= LEVEL_WIDTH)
+
+        if (newPos.x >= LEVEL_WIDTH-1)
         {
             newPos.x = newGridX;
             player.velocity.x = 0;
@@ -327,7 +329,7 @@ int main(int argc, char* argv[])
             player.velocity.x = 0;
         }
 
-        if (newPos.y + 1 >= LEVEL_HEIGHT)
+        if (newPos.y >= LEVEL_HEIGHT-1)
         {
             newPos.y = newGridY;
             player.velocity.y = 0;
@@ -397,6 +399,8 @@ int main(int argc, char* argv[])
             player.hasJumped = false;
         }
 
+        // prevent clipping out of bounds
+        newPos = Vector2Clamp(newPos, {0, 0}, {LEVEL_WIDTH - 1, LEVEL_HEIGHT - 1});
         player.position = newPos;
 
         // ---------------- LEVEL RENDER ------------------------
